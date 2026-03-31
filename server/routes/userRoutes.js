@@ -3,6 +3,7 @@ import {
   checkAuth,
   signup,
   updateProfile,
+  login,
 } from "../controllers/userController.js";
 import { protectRoute } from "../middleware/auth.js";
 
