@@ -1,17 +1,17 @@
 import cloudinary from "../lib/cloudinary.js";
 import { generateToken } from "../lib/utils.js";
 import User from "../models/User.js";
-import bcrypt, { compare } from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 export const signup = async (req, res) => {
   const { fullName, password, email, bio } = req.body;
   try {
-    if ((!fullName || !password || !email, !bio)) {
+    if (!fullName || !password || !email || !bio) {
       return res.json({ success: false, message: "Missing parameters" });
     }
     const existedUser = await User.findOne({ email });
     if (existedUser) {
-      return res.json({ success: false, message: "User Already exists" });
+      return res.json({ success: false, message: "User already exists" });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -30,7 +30,7 @@ export const signup = async (req, res) => {
       success: true,
       userData: newUser,
       token,
-      message: "Account created Successfully",
+      message: "Account created successfully",
     });
   } catch (error) {
     res.json({ success: false, message: error.message });
@@ -43,28 +43,28 @@ export const login = async (req, res) => {
     const userData = await User.findOne({ email });
 
     if (!userData) {
-      res.json({ success: false, message: "Email doesn't exist" });
+      return res.json({ success: false, message: "Email not found" });
     }
 
     const isPasswordCorrect = await bcrypt.compare(password, userData.password);
     if (!isPasswordCorrect) {
-      res.json({ success: false, message: "Passeord is not correct" });
+      return res.json({ success: false, message: "Incorrect password" });
     }
 
     const token = generateToken(userData._id);
 
-    res.json({ success: true, userData, token, message: "Login successfully" });
+    res.json({ success: true, userData, token, message: "Logged in successfully" });
   } catch (error) {
     res.json({ success: false, message: error.message });
   }
 };
 
+// Fixed: was returning success: false always
 export const checkAuth = (req, res) => {
-  res.json({ success: false, user: req.user });
+  res.json({ success: true, user: req.user });
 };
 
-// func to update user profile
-
+// Update profile (name, bio, avatar)
 export const updateProfile = async (req, res) => {
   try {
     const { profilePic, bio, fullName } = req.body;
@@ -74,18 +74,49 @@ export const updateProfile = async (req, res) => {
       updatedUser = await User.findByIdAndUpdate(
         userId,
         { bio, fullName },
-        { new: true },
+        { new: true }
       );
     } else {
       const upload = await cloudinary.uploader.upload(profilePic);
       updatedUser = await User.findByIdAndUpdate(
         userId,
         { profilePic: upload.secure_url, bio, fullName },
-        { new: true },
+        { new: true }
       );
     }
-
     res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.log(error.message);
+    res.json({ success: false, message: error.message });
+  }
+};
+
+// Change password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user._id;
+
+    if (!currentPassword || !newPassword) {
+      return res.json({ success: false, message: "Both current and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.json({ success: false, message: "New password must be at least 6 characters" });
+    }
+
+    const user = await User.findById(userId);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.json({ success: false, message: "Current password is incorrect" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await User.findByIdAndUpdate(userId, { password: hashedPassword });
+
+    res.json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     console.log(error.message);
     res.json({ success: false, message: error.message });
